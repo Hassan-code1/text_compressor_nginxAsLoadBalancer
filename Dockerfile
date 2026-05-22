@@ -1,14 +1,12 @@
 # Use the official Nginx image from Docker Hub
 FROM nginx:alpine
 
-# Remove the default Nginx configuration file
-RUN rm /etc/nginx/nginx.conf
+# Copy the template to the directory where the nginx entrypoint expects templates
+COPY default.conf.template /etc/nginx/templates/default.conf.template
 
-# Copy our custom Nginx configuration file to the container
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Expose port 80 to the host
+# Expose port 80
 EXPOSE 80
 
-# Start Nginx in the foreground
-CMD ["nginx", "-g", "daemon off;"]
+# The official Nginx Alpine image automatically runs `envsubst` on files 
+# ending in .template within /etc/nginx/templates/ and places the output
+# into /etc/nginx/conf.d/ (replacing the default configuration).

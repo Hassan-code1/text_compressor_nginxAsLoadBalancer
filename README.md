@@ -2,29 +2,25 @@
 
 This directory contains the configuration to run Nginx as a load balancer for the Text Compressor backend servers.
 
-## Configuration
+## Configuration using Environment Variables
 
-1. Open `nginx.conf`.
-2. Locate the `upstream backend_servers` block.
-3. Replace the placeholder `server` entries with the actual URLs, IPs, or ports of your two backend servers.
-   - For local testing with two backends on ports 3001 and 3002, use:
-     ```nginx
-     server host.docker.internal:3001;
-     server host.docker.internal:3002;
-     ```
+The Nginx configuration relies on Docker's built-in `envsubst` feature. When the container starts, it reads `default.conf.template` and replaces the variables with your environment variables.
 
-## Running with Docker
+### Running with Docker
 
-The easiest way to run this load balancer is using Docker.
+You must provide the backend URLs via environment variables when running the container.
 
 1. Build the Docker image:
    ```bash
    docker build -t text-compressor-lb .
    ```
 
-2. Run the Docker container:
+2. Run the Docker container, injecting the two backend URLs as environment variables:
    ```bash
-   docker run -d -p 8080:80 --name my-nginx-lb text-compressor-lb
+   docker run -d -p 8080:80 \
+     -e BACKEND_1="backend1.yourdomain.com" \
+     -e BACKEND_2="backend2.yourdomain.com" \
+     --name my-nginx-lb text-compressor-lb
    ```
 
 3. Update your Frontend's `.env` file to point to the Nginx Load Balancer URL:
@@ -32,4 +28,4 @@ The easiest way to run this load balancer is using Docker.
    VITE_BACKEND_URL=http://localhost:8080
    ```
 
-Now, when the frontend sends a request to `http://localhost:8080`, Nginx will intercept it and route it to one of the configured backend servers using Round Robin load balancing.
+Now, when the frontend sends a request to `http://localhost:8080`, Nginx will intercept it and route it to either `BACKEND_1` or `BACKEND_2` using Round Robin load balancing.
