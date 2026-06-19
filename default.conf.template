@@ -12,7 +12,7 @@ server {
     client_max_body_size 50M;
 
     location / {
-        proxy_pass https://backend_servers;
+        proxy_pass http://backend_servers;
         
         # Render requires SNI to route the request properly
         proxy_ssl_server_name on;
