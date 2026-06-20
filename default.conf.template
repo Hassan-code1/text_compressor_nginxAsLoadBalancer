@@ -12,20 +12,31 @@ server {
     client_max_body_size 50M;
 
     location / {
-        proxy_pass http://backend_servers;
-        
-        # Render requires SNI to route the request properly
+        # FIXED: Use https:// so Render (HTTPS-only) doesn't 301-redirect us
+        proxy_pass https://backend_servers;
+
+        # Now meaningful because proxy_pass is https://
         proxy_ssl_server_name on;
-        
-        proxy_set_header Host $host;
+
+        # Disable cert verification (Render uses valid certs, but upstream block
+        # uses a generic name — set to 'on' and provide a CA bundle if you want strict)
+        proxy_ssl_verify off;
+
+        # FIXED: Send the actual backend hostname so Render's SNI/vhost routing works.
+        # $proxy_host resolves to the upstream server's host:port (e.g. backend-1.onrender.com)
+        proxy_set_header Host $proxy_host;
+
         proxy_set_header Origin $http_origin;
 
         # Pass important headers to the backend
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Optional: Timeout settings for long-running compression tasks
+        # FIXED: Hardcode 'https' so Express (trust proxy) doesn't see 'http'
+        # and attempt its own HTTP->HTTPS upgrade redirect
+        proxy_set_header X-Forwarded-Proto https;
+
+        # Timeout settings for long-running compression tasks
         proxy_connect_timeout 60s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
