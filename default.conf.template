@@ -1,7 +1,8 @@
 upstream backend_servers {
     # These environment variables will be substituted by Docker on startup
-    server ${BACKEND_1};
-    server ${BACKEND_2};
+    # :443 is REQUIRED — without it nginx defaults to port 80 and fails SSL handshake
+    server ${BACKEND_1}:443;
+    server ${BACKEND_2}:443;
 }
 
 server {
@@ -22,9 +23,11 @@ server {
         # uses a generic name — set to 'on' and provide a CA bundle if you want strict)
         proxy_ssl_verify off;
 
-        # FIXED: Send the actual backend hostname so Render's SNI/vhost routing works.
-        # $proxy_host resolves to the upstream server's host:port (e.g. backend-1.onrender.com)
-        proxy_set_header Host $proxy_host;
+        # Send the actual backend hostname so Render's SNI/vhost routing works.
+        # We use $host here because $proxy_host now includes ':443' which can
+        # confuse some Render edge nodes. The Host header should be hostname-only.
+        # The upstream port is already controlled by the server :443 entry above.
+        proxy_set_header Host $http_host;
 
         proxy_set_header Origin $http_origin;
 
