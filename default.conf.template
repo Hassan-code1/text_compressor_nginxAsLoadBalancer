@@ -1,45 +1,48 @@
-upstream backend_servers {
-    # These environment variables will be substituted by Docker on startup
-    # :443 is REQUIRED — without it nginx defaults to port 80 and fails SSL handshake
-    server ${BACKEND_1}:443;
-    server ${BACKEND_2}:443;
+# DNS resolver is REQUIRED when proxy_pass uses a variable.
+# Cloudflare (1.1.1.1) + Google (8.8.8.8) as fallback.
+# valid=30s: re-resolve every 30s so Render's dynamic IPs stay fresh.
+resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
+
+# split_clients distributes load 50/50 using a hash of each request's unique ID.
+# After envsubst runs at container startup, ${BACKEND_1} and ${BACKEND_2}
+# are replaced with actual hostnames (e.g. text-compressor-backend-1.onrender.com).
+split_clients "$request_id" $backend_host {
+    50%  ${BACKEND_1};
+    *    ${BACKEND_2};
 }
 
 server {
     listen 80;
     server_name localhost;
 
-    # Increase max body size if you are uploading large files for compression
     client_max_body_size 50M;
 
     location / {
-        # FIXED: Use https:// so Render (HTTPS-only) doesn't 301-redirect us
-        proxy_pass https://backend_servers;
+        # KEY FIX: proxy_pass with a VARIABLE, not a named upstream block.
+        #
+        # With upstream block:  SNI = "backend_servers"  (wrong — Cloudflare rejects it)
+        # With variable:        SNI = actual hostname    (correct — Cloudflare routes it)
+        #
+        # This is why proxy_ssl_server_name on was failing despite correct port.
+        proxy_pass https://$backend_host;
 
-        # Now meaningful because proxy_pass is https://
+        # proxy_ssl_server_name reads SNI from the $backend_host variable value
         proxy_ssl_server_name on;
 
-        # Disable cert verification (Render uses valid certs, but upstream block
-        # uses a generic name — set to 'on' and provide a CA bundle if you want strict)
+        # Render's certs are valid but the upstream block name (now gone) was the
+        # mismatch. With the real hostname in $backend_host, you can enable verify.
         proxy_ssl_verify off;
 
-        # Send the actual backend hostname so Render's SNI/vhost routing works.
-        # We use $host here because $proxy_host now includes ':443' which can
-        # confuse some Render edge nodes. The Host header should be hostname-only.
-        # The upstream port is already controlled by the server :443 entry above.
-        proxy_set_header Host $http_host;
+        # Host header must be the real backend hostname for Render/Cloudflare vhost routing
+        proxy_set_header Host $backend_host;
 
         proxy_set_header Origin $http_origin;
-
-        # Pass important headers to the backend
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 
-        # FIXED: Hardcode 'https' so Express (trust proxy) doesn't see 'http'
-        # and attempt its own HTTP->HTTPS upgrade redirect
+        # Tell Express the connection arrived over HTTPS (prevents its own redirect loop)
         proxy_set_header X-Forwarded-Proto https;
 
-        # Timeout settings for long-running compression tasks
         proxy_connect_timeout 60s;
         proxy_send_timeout 300s;
         proxy_read_timeout 300s;
